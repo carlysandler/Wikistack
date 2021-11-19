@@ -1,46 +1,104 @@
 // adding routers
 const express = require('express');
 const router = express.Router();
-
 // require the addPAge module from the views folder
-const { Page } = require("../models");
-const { addPage } = require('../views');
+const { Page, User } = require("../models");
+const { main, addPage, editPage, wikiPage } = require('../views');
 
-
-// Generate slug Functions
-const generateSlug = (title) => {
-  // Removes all non-alphanumeric characters from title
-  // And make whitespace underscore
-  return title.replace(/\s+/g, "_").replace(/\W/g, '');
-}
-
-
-
-router.get('/', (req, res, next) => {
-  res.send('got to GET /wiki/');
+// GET /wiki
+router.get('/', async (req, res, next) => {
+  try {
+    const pages = await Page.findAll();
+    res.send(main(pages));
+  } catch (error) { next(error); }
 
 });
 
+// POST /wiki
 router.post('/', async (req, res, next) => {
   try {
-    const page = new Page({
-      title: generateSlug(page.title),
-      content: page.content
+    const [user, wasCreated] = await User.findOrCreate({
+      where: {
+        name: req.body.name,
+        email: req.body.email
+      }
     });
 
-    await page.save();
+    const page = await Page.create(req.body);
 
-    res.redirect('/');
-  } catch (error) { next(error) }
+    await page.setAuthor(user);
+
+    res.redirect("/wiki/" + page.slug);
+  } catch(error) { next(error); }
 
 });
 
-router.get('/add', (req, res, next) => {
+// POST /wiki/:slug
+router.put("/:slug", async (req, res, next) => {
   try {
+    const [updateRowCount, updatedPages] = await Page.update(req.body, {
+      where: {
+        slug: req.params.slug
+      },
+      returning: true
+    });
 
-  }
+    res.direct("/wiki/" + updatedPages[0].slug);
+  } catch (error) { next(error);}
+});
+
+// DELETE /wiki/:slug/
+router.delete("/:slug", async (req, res, next) => {
+  try {
+    await Page.destroy({
+      where: {
+        slug: req.params.slug
+      }
+    });
+
+    res.redirect("/wiki");
+  } catch (error) { next(error);}
+});
+
+// GET /wiki/add
+router.get("/wiki/add", async (req, res) => {
   res.send(addPage());
 });
+
+// GET /wiki/:slug/
+router.get("/:slug", async (req, res, next) => {
+  try {
+    const page = await Page.findOne({
+      where: {
+        slug: req.params.slug
+        }
+    });
+    if (page === null) {
+      res.sendStatus(404);
+    } else {
+      const author = await page.getAuthor();
+      res.send(wikiPage(page, author));
+    }
+  } catch (error) { next(error);}
+});
+
+// GET /wiki/slug/edit
+router.get("/:slug/edit", async(req, res, next) => {
+  try {
+    const page = await Page.findOne({
+      where: {
+        slug: req.params.slug
+      }
+    });
+
+    if (page === null) {
+      res.sendStatus(404);
+    } else {
+      const author = await page.getAuthor();
+      res.send(editPage(page, author));
+    }
+  } catch (error) { next(error);}
+})
 
 
 
